@@ -1,0 +1,17 @@
+# Thie serivce unit is for send score info
+# By xun
+#
+
+[Unit]
+Description=Timer unit for death-knell to run every 1 hour
+Wants=death-knell.timer
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash /home/xun/Workspace/py/death-knell/run.sh
+WorkingDirectory=/home/xun/Workspace/py/death-knell/score
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

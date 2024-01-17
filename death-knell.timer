@@ -1,0 +1,14 @@
+# Thie timer unit is for death-knell service
+# By xun
+#
+
+[Unit]
+Description=Timer unit for death-knell to run every 1 hour
+Requires=death-knell.service
+
+[Timer]
+Unit=death-knell.service
+Oncalendar=hourly
+
+[Install]
+WantedBy=timers.target
