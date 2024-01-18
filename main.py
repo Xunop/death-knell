@@ -280,27 +280,29 @@ with redirect_stdout(null_file):
 
 captcha = ocr.classification(response.content)
 
-login_data = {
-    '__VIEWSTATE': 'dDwtMTM0OTIyMDA2Nzs7PmQzMJt4J8nhapAW2eCOBH0ej4Fq',
-    '__VIEWSTATEGENERATOR': '92719903',
-    'txtUserName': user_id,
-    'TextBox2': user_pwd,
-    'txtSecretCode': captcha,
-    'RadioButtonList1': '%D1%A7%C9%FA',
-    'Button1': '',
-    'lbLanguage': '',
-    'hidPdrs': '',
-    'hidsc': ''
-}
+def_response = requests.get(login_url, cookies=cookie.cookies)
+def_view_state = def_response.text.split(
+    '<input type="hidden" name="__VIEWSTATE" value="')[1].split('" />')[0]
 
-login_response = requests.post(
-    login_url, data=login_data, cookies=cookie.cookies)
-
-if '<title>ERROR' in login_response.text:
-    print('Login failed, try another method')
-    method = 2
+# if exist __VIEWSTATEGENERATOR
+if '<input type="hidden" name="__VIEWSTATEGENERATOR" value="' in response.text:
+    def_view_state_generator = def_response.text.split(
+        '<input type="hidden" name="__VIEWSTATEGENERATOR" value="')[1].split('" />')[0]
     login_data = {
-        '__VIEWSTATE': 'dDwtMTM0OTIyMDA2Nzs7PhbP2uocdzpYvi/UGitcfOWK03ui',
+        '__VIEWSTATE': def_view_state,
+        '__VIEWSTATEGENERATOR': def_view_state_generator,
+        'txtUserName': user_id,
+        'TextBox2': user_pwd,
+        'txtSecretCode': captcha,
+        'RadioButtonList1': '%D1%A7%C9%FA',
+        'Button1': '',
+        'lbLanguage': '',
+        'hidPdrs': '',
+        'hidsc': ''
+    }
+else:
+    login_data = {
+        '__VIEWSTATE': def_view_state,
         'txtUserName': user_id,
         'TextBox2': user_pwd,
         'txtSecretCode': captcha,
@@ -311,8 +313,13 @@ if '<title>ERROR' in login_response.text:
         'hidsc': ''
     }
 
-    login_response = requests.post(
-        login_url, data=login_data, cookies=cookie.cookies)
+login_response = requests.post(
+    login_url, data=login_data, cookies=cookie.cookies)
+
+# if '<title>ERROR' in login_response.text:
+#     print('Login failed, retrying...')
+#     login_response = requests.post(
+#         login_url, data=login_data, cookies=cookie.cookies)
 
 params = {
     'xh': user_id,
@@ -328,25 +335,26 @@ headers = {
     'Referer': 'http://jwxt.njupt.edu.cn/xs_main.aspx?xh=' + user_id,
 }
 
-content_reponse = requests.get(
+content_response = requests.get(
     query_score_url, headers=headers, cookies=cookie.cookies)
 
-view_state = content_reponse.text.split(
+login_view_state = content_response.text.split(
     '<input type="hidden" name="__VIEWSTATE" value="')[1].split('" />')[0]
 
-if method == 1:
-    view_state_generator = content_reponse.text.split(
+# if exist __VIEWSTATEGENERATOR
+if '<input type="hidden" name="__VIEWSTATEGENERATOR" value="' in content_response.text:
+    login_view_state_generator = content_response.text.split(
         '<input type="hidden" name="__VIEWSTATEGENERATOR" value="')[1].split('" />')[0]
     score_data = {
-        '__VIEWSTATE': view_state,
-        '__VIEWSTATEGENERATOR': view_state_generator,
+        '__VIEWSTATE': login_view_state,
+        '__VIEWSTATEGENERATOR': login_view_state_generator,
         'ddlXN': year,
         'ddlXQ': semester,
         'Button1': '%B0%B4%D1%A7%C6%DA%B2%E9%D1%AF'
     }
 else:
     score_data = {
-        '__VIEWSTATE': view_state,
+        '__VIEWSTATE': login_view_state,
         'ddlXN': year,
         'ddlXQ': semester,
         'Button1': '%B0%B4%D1%A7%C6%DA%B2%E9%D1%AF'
@@ -355,9 +363,9 @@ else:
 score_response = requests.post(
     query_score_url, data=score_data, cookies=cookie.cookies, headers=headers)
 
-view_state = score_response.text.split(
+login_view_state = score_response.text.split(
     '<input type="hidden" name="__VIEWSTATE" value="')[1].split('" />')[0]
-courses = parse_score(view_state)
+courses = parse_score(login_view_state)
 
 filename = 'course-data.txt'
 new_filename = 'course-data.tmp'
