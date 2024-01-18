@@ -8,7 +8,7 @@ Requires=death-knell.service
 
 [Timer]
 Unit=death-knell.service
-Oncalendar=hourly
+OnCalendar=hourly
 
 [Install]
 WantedBy=timers.target
