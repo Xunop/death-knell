@@ -7,9 +7,22 @@ import re
 import base64
 import difflib
 import os
-from urllib.parse import urlencode, urljoin
+from time import sleep
+from PIL import Image
+import io
 from contextlib import redirect_stdout
 from io import StringIO
+
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.alert import Alert
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
+
+from course import Course
 
 
 def parse_args():
@@ -131,44 +144,47 @@ def parse_score(content):
         pattern = re.compile(r'l<([^;]+);+>>;')
         matches = pattern.findall(decoded_str)
 
-        current_course = -1
         # cut the first 19 matches
         matches = matches[19:]
         courses = []
+        course_data = {}
         for idx, match in enumerate(matches):
-            data = idx % 22
             if match == '&nbsp\\':
                 match = 'NULL'
             if match == 'o<f>':
                 break
             match = match.strip()
-            if data == 0:
-                course_year = match
-                current_course += 1
-                course_data = {'Year': course_year}
-            elif data == 1:
-                course_data['Semester'] = match
-            elif data == 2:
-                course_data['ID'] = match
-            elif data == 3:
-                course_data['Name'] = match
-            elif data == 4:
-                course_data['Type'] = match  # 课程性质
-            elif data == 6:
-                course_data['Credit'] = match  # 学分
-            elif data == 8:
-                course_data['GPA'] = match  # 绩点
-            elif data == 9:
-                course_data['Normal'] = match  # 平时分
-            elif data == 11:
-                course_data['Real'] = match  # 卷面分
-            elif data == 13:
-                course_data['Total'] = match  # 总分
-                courses.append(course_data)
+
+           # Create course fields based on the index within a cycle of 22
+            cycle_index = idx % 22
+            if cycle_index == 0:
+                course_data['year'] = match
+            elif cycle_index == 1:
+                course_data['semester'] = match
+            elif cycle_index == 2:
+                course_data['course_id'] = match
+            elif cycle_index == 3:
+                course_data['name'] = match
+            elif cycle_index == 4:
+                course_data['type'] = match
+            elif cycle_index == 6:
+                course_data['credit'] = match
+            elif cycle_index == 8:
+                course_data['gpa'] = match
+            elif cycle_index == 9:
+                course_data['normal_score'] = match
+            elif cycle_index == 11:
+                course_data['real_score'] = match
+            elif cycle_index == 13:
+                course_data['total_score'] = match
+                # Create a Course object and add to the list when all required data is gathered
+                courses.append(Course(**course_data))
+
         return courses
 
     except Exception as e:
         print(f"An error occurred: {e}")
+        return []
 
 
 def get_course_info(file_name, course_name):
@@ -250,6 +266,8 @@ root_url = 'http://jwxt.njupt.edu.cn/'
 
 login_url = 'http://jwxt.njupt.edu.cn/default2.aspx'
 
+cookie_url = 'http://jwxt.njupt.edu.cn/beLd2jeSRcTo/5TAbvFJ54R4g.e793599.js'
+
 captcha_url = 'http://jwxt.njupt.edu.cn/CheckCode.aspx'
 
 content_url = 'http://jwxt.njupt.edu.cn/content.aspx'
@@ -257,10 +275,7 @@ content_url = 'http://jwxt.njupt.edu.cn/content.aspx'
 query_score_url = 'http://jwxt.njupt.edu.cn/xscj_gc.aspx'
 
 
-# method
-method = 1
-
-cookie = requests.get(root_url)
+# cookie = requests.get(root_url)
 
 args = parse_args()
 user_name = args.name
@@ -271,105 +286,117 @@ semester = args.semester
 webhook_url = args.webhook
 
 # request with cookie
-response = requests.get(captcha_url, cookies=cookie.cookies)
+# response = requests.get(captcha_url, cookies=cookie.cookies)
 
 # ignore print info
 null_file = StringIO()
 with redirect_stdout(null_file):
     ocr = ddddocr.DdddOcr()
 
-captcha = ocr.classification(response.content)
+# captcha = ocr.classification(response.content)
 
-def_response = requests.get(login_url, cookies=cookie.cookies)
-def_view_state = def_response.text.split(
-    '<input type="hidden" name="__VIEWSTATE" value="')[1].split('" />')[0]
+options = Options()
+# Use headless mode
+options.add_argument("--headless")
+driver = webdriver.Firefox(options=options)
 
-# if exist __VIEWSTATEGENERATOR
-if '<input type="hidden" name="__VIEWSTATEGENERATOR" value="' in response.text:
-    def_view_state_generator = def_response.text.split(
-        '<input type="hidden" name="__VIEWSTATEGENERATOR" value="')[1].split('" />')[0]
-    login_data = {
-        '__VIEWSTATE': def_view_state,
-        '__VIEWSTATEGENERATOR': def_view_state_generator,
-        'txtUserName': user_id,
-        'TextBox2': user_pwd,
-        'txtSecretCode': captcha,
-        'RadioButtonList1': '%D1%A7%C9%FA',
-        'Button1': '',
-        'lbLanguage': '',
-        'hidPdrs': '',
-        'hidsc': ''
-    }
-else:
-    login_data = {
-        '__VIEWSTATE': def_view_state,
-        'txtUserName': user_id,
-        'TextBox2': user_pwd,
-        'txtSecretCode': captcha,
-        'RadioButtonList1': '%D1%A7%C9%FA',
-        'Button1': '',
-        'lbLanguage': '',
-        'hidPdrs': '',
-        'hidsc': ''
-    }
+try:
+    login_url = "http://jwxt.njupt.edu.cn"
+    driver.get(login_url)
 
-login_response = requests.post(
-    login_url, data=login_data, cookies=cookie.cookies)
+    sleep(5)
 
-# if '<title>ERROR' in login_response.text:
-#     print('Login failed, retrying...')
-#     login_response = requests.post(
-#         login_url, data=login_data, cookies=cookie.cookies)
+    captcha_element = driver.find_element(By.ID, "icode")
+    location = captcha_element.location
+    size = captcha_element.size
+    screenshot = driver.get_screenshot_as_png()
+    image_stream = io.BytesIO(screenshot)
+    image = Image.open(image_stream)
 
-params = {
-    'xh': user_id,
-    'xm': user_name,
-    'gnmkdm': 'N121605'
-}
+    # Get the position of the captcha
+    left = location['x']
+    top = location['y']
+    right = left + size['width']
+    bottom = top + size['height']
 
-query_score_url = urljoin(query_score_url, '?' +
-                          urlencode(params, encoding='gb2312'))
+    # Get the captcha image
+    captcha_image = image.crop((left, top, right, bottom))
+    captcha = ocr.classification(captcha_image)
+
+    print(captcha)
+    driver.find_element(By.NAME, "txtUserName").send_keys(
+        user_id)
+    driver.find_element(By.NAME, "TextBox2").send_keys(
+        user_pwd)
+    driver.find_element(By.NAME, "txtSecretCode").send_keys(
+        captcha)
+
+    driver.find_element(By.ID, "RadioButtonList1_2").send_keys(
+        Keys.SPACE)
+    driver.find_element(By.NAME, "Button1").click()
+
+    WebDriverWait(driver, 10).until(EC.alert_is_present())
+    alert = Alert(driver)
+    # print("alert：", alert.text)
+    # Accept the alert
+    alert.accept()
+
+    # Find the menu
+    information_query_menu = WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located(
+            (By.XPATH, "//span[contains(text(), '信息查询')]"))
+    )
+
+    # Move to the menu
+    ActionChains(driver).move_to_element(information_query_menu).perform()
+
+    score_query_link = WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located(
+            (By.XPATH, "//a[contains(@onclick, '成绩查询')]"))
+    )
+    # Need to switch to the iframe
+    driver.switch_to.frame("iframeautoheight")
+    # driver.save_screenshot('before_click.png')
+    score_query_link.click()
+    ActionChains(driver).move_by_offset(100, 100).perform()
+    # driver.save_screenshot('after_click.png')
+
+    print("Querying score...")
+
+    print(driver.current_url)
+    # print(driver.page_source)
+
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located(
+            (By.ID, "ddlXN"))
+    )
+
+    # Select year
+    year_select = driver.find_element(By.NAME, "ddlXN")
+    # print(year_select.text)
+    year_select.send_keys(year)
+
+    # Select semester
+    semester_select = driver.find_element(By.NAME, "ddlXQ")
+    semester_select.send_keys(semester)
+
+    query_button = driver.find_element(By.ID, "Button1")
+    query_button.click()
+
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located(
+            (By.ID, "Datagrid1"))
+    )
+
+    score_table = driver.find_element(By.NAME, "__VIEWSTATE")
+    score_value = score_table.get_attribute("value")
+    # score_content = score_table.get_attribute("innerHTML")
+    # print(score_value)
+
+    courses = parse_score(score_value)
+    for course in courses:
+        print(course)
 
 
-headers = {
-    'Referer': 'http://jwxt.njupt.edu.cn/xs_main.aspx?xh=' + user_id,
-}
-
-content_response = requests.get(
-    query_score_url, headers=headers, cookies=cookie.cookies)
-
-login_view_state = content_response.text.split(
-    '<input type="hidden" name="__VIEWSTATE" value="')[1].split('" />')[0]
-
-# if exist __VIEWSTATEGENERATOR
-if '<input type="hidden" name="__VIEWSTATEGENERATOR" value="' in content_response.text:
-    login_view_state_generator = content_response.text.split(
-        '<input type="hidden" name="__VIEWSTATEGENERATOR" value="')[1].split('" />')[0]
-    score_data = {
-        '__VIEWSTATE': login_view_state,
-        '__VIEWSTATEGENERATOR': login_view_state_generator,
-        'ddlXN': year,
-        'ddlXQ': semester,
-        'Button1': '%B0%B4%D1%A7%C6%DA%B2%E9%D1%AF'
-    }
-else:
-    score_data = {
-        '__VIEWSTATE': login_view_state,
-        'ddlXN': year,
-        'ddlXQ': semester,
-        'Button1': '%B0%B4%D1%A7%C6%DA%B2%E9%D1%AF'
-    }
-
-score_response = requests.post(
-    query_score_url, data=score_data, cookies=cookie.cookies, headers=headers)
-
-login_view_state = score_response.text.split(
-    '<input type="hidden" name="__VIEWSTATE" value="')[1].split('" />')[0]
-courses = parse_score(login_view_state)
-
-filename = 'course-data.txt'
-new_filename = 'course-data.tmp'
-write_to_file(courses, filename, new_filename)
-compare_and_output_diff(filename, new_filename)
-push_to_feishu(filename)
-write_to_course_file(courses)
+finally:
+    driver.quit()
