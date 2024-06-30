@@ -262,6 +262,108 @@ def push_to_feishu(filename):
         print(f"An error occurred: {e}")
 
 
+def get_courses(user_id, user_pwd, year, semester, webhook_url):
+    try:
+        login_url = "http://jwxt.njupt.edu.cn"
+        driver.get(login_url)
+
+        sleep(5)
+
+        captcha_element = driver.find_element(By.ID, "icode")
+        location = captcha_element.location
+        size = captcha_element.size
+        screenshot = driver.get_screenshot_as_png()
+        image_stream = io.BytesIO(screenshot)
+        image = Image.open(image_stream)
+
+        # Get the position of the captcha
+        left = location['x']
+        top = location['y']
+        right = left + size['width']
+        bottom = top + size['height']
+
+        # Get the captcha image
+        captcha_image = image.crop((left, top, right, bottom))
+        captcha = ocr.classification(captcha_image)
+
+        # print(captcha)
+        driver.find_element(By.NAME, "txtUserName").send_keys(
+            user_id)
+        driver.find_element(By.NAME, "TextBox2").send_keys(
+            user_pwd)
+        driver.find_element(By.NAME, "txtSecretCode").send_keys(
+            captcha)
+
+        driver.find_element(By.ID, "RadioButtonList1_2").send_keys(
+            Keys.SPACE)
+        driver.find_element(By.NAME, "Button1").click()
+
+        WebDriverWait(driver, 10).until(EC.alert_is_present())
+        alert = Alert(driver)
+        # print("alert：", alert.text)
+        # Accept the alert
+        alert.accept()
+
+        # Find the menu
+        information_query_menu = WebDriverWait(driver, 10).until(
+            EC.visibility_of_element_located(
+                (By.XPATH, "//span[contains(text(), '信息查询')]"))
+        )
+
+        # Move to the menu
+        ActionChains(driver).move_to_element(information_query_menu).perform()
+
+        score_query_link = WebDriverWait(driver, 10).until(
+            EC.visibility_of_element_located(
+                (By.XPATH, "//a[contains(@onclick, '成绩查询')]"))
+        )
+        # Need to switch to the iframe
+        driver.switch_to.frame("iframeautoheight")
+        # driver.save_screenshot('before_click.png')
+        score_query_link.click()
+        ActionChains(driver).move_by_offset(100, 100).perform()
+        # driver.save_screenshot('after_click.png')
+
+        print("Querying score...")
+
+        # print(driver.current_url)
+        # print(driver.page_source)
+
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located(
+                (By.ID, "ddlXN"))
+        )
+
+        # Select year
+        year_select = driver.find_element(By.NAME, "ddlXN")
+        # print(year_select.text)
+        year_select.send_keys(year)
+
+        # Select semester
+        semester_select = driver.find_element(By.NAME, "ddlXQ")
+        semester_select.send_keys(semester)
+
+        query_button = driver.find_element(By.ID, "Button1")
+        query_button.click()
+
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located(
+                (By.ID, "Datagrid1"))
+        )
+
+        score_table = driver.find_element(By.NAME, "__VIEWSTATE")
+        score_value = score_table.get_attribute("value")
+        # score_content = score_table.get_attribute("innerHTML")
+        # print(score_value)
+
+        courses = parse_score(score_value)
+        for course in courses:
+            print(course)
+
+    finally:
+        driver.quit()
+
+
 root_url = 'http://jwxt.njupt.edu.cn/'
 
 login_url = 'http://jwxt.njupt.edu.cn/default2.aspx'
@@ -293,110 +395,9 @@ null_file = StringIO()
 with redirect_stdout(null_file):
     ocr = ddddocr.DdddOcr()
 
-# captcha = ocr.classification(response.content)
-
 options = Options()
 # Use headless mode
 options.add_argument("--headless")
 driver = webdriver.Firefox(options=options)
 
-try:
-    login_url = "http://jwxt.njupt.edu.cn"
-    driver.get(login_url)
-
-    sleep(5)
-
-    captcha_element = driver.find_element(By.ID, "icode")
-    location = captcha_element.location
-    size = captcha_element.size
-    screenshot = driver.get_screenshot_as_png()
-    image_stream = io.BytesIO(screenshot)
-    image = Image.open(image_stream)
-
-    # Get the position of the captcha
-    left = location['x']
-    top = location['y']
-    right = left + size['width']
-    bottom = top + size['height']
-
-    # Get the captcha image
-    captcha_image = image.crop((left, top, right, bottom))
-    captcha = ocr.classification(captcha_image)
-
-    print(captcha)
-    driver.find_element(By.NAME, "txtUserName").send_keys(
-        user_id)
-    driver.find_element(By.NAME, "TextBox2").send_keys(
-        user_pwd)
-    driver.find_element(By.NAME, "txtSecretCode").send_keys(
-        captcha)
-
-    driver.find_element(By.ID, "RadioButtonList1_2").send_keys(
-        Keys.SPACE)
-    driver.find_element(By.NAME, "Button1").click()
-
-    WebDriverWait(driver, 10).until(EC.alert_is_present())
-    alert = Alert(driver)
-    # print("alert：", alert.text)
-    # Accept the alert
-    alert.accept()
-
-    # Find the menu
-    information_query_menu = WebDriverWait(driver, 10).until(
-        EC.visibility_of_element_located(
-            (By.XPATH, "//span[contains(text(), '信息查询')]"))
-    )
-
-    # Move to the menu
-    ActionChains(driver).move_to_element(information_query_menu).perform()
-
-    score_query_link = WebDriverWait(driver, 10).until(
-        EC.visibility_of_element_located(
-            (By.XPATH, "//a[contains(@onclick, '成绩查询')]"))
-    )
-    # Need to switch to the iframe
-    driver.switch_to.frame("iframeautoheight")
-    # driver.save_screenshot('before_click.png')
-    score_query_link.click()
-    ActionChains(driver).move_by_offset(100, 100).perform()
-    # driver.save_screenshot('after_click.png')
-
-    print("Querying score...")
-
-    print(driver.current_url)
-    # print(driver.page_source)
-
-    WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located(
-            (By.ID, "ddlXN"))
-    )
-
-    # Select year
-    year_select = driver.find_element(By.NAME, "ddlXN")
-    # print(year_select.text)
-    year_select.send_keys(year)
-
-    # Select semester
-    semester_select = driver.find_element(By.NAME, "ddlXQ")
-    semester_select.send_keys(semester)
-
-    query_button = driver.find_element(By.ID, "Button1")
-    query_button.click()
-
-    WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located(
-            (By.ID, "Datagrid1"))
-    )
-
-    score_table = driver.find_element(By.NAME, "__VIEWSTATE")
-    score_value = score_table.get_attribute("value")
-    # score_content = score_table.get_attribute("innerHTML")
-    # print(score_value)
-
-    courses = parse_score(score_value)
-    for course in courses:
-        print(course)
-
-
-finally:
-    driver.quit()
+get_courses(user_id, user_pwd, year, semester, webhook_url)
