@@ -1,3 +1,4 @@
 score/*
 run.sh
 __pycache__/
+*.db

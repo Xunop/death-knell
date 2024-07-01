@@ -23,6 +23,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 
 from course import Course
+from sqlite import insert_course, get_course, update_course, create_database
 
 
 def parse_args():
@@ -41,98 +42,6 @@ def parse_args():
     parser.add_argument('-w', '--webhook',
                         help='Webhook URL', default='')
     return parser.parse_args()
-
-
-def find_available_filename(base_filename):
-    # Find an available filename by adding a number suffix
-
-    suffix = 2
-    while True:
-        new_filename = f"{base_filename}-{suffix}.txt"
-        if not os.path.isfile(new_filename):
-            return new_filename
-        suffix += 1
-
-
-def compare_and_output_diff(old_filename, new_filename):
-    print('Comparing files...')
-    if not os.path.isfile(new_filename):
-        print(f'No new file {new_filename} found')
-        return
-    # Compare files and print differences
-    with open(old_filename, 'r', encoding='utf-8') as main_file, \
-            open(new_filename, 'r', encoding='utf-8') as new_file:
-        main_content = main_file.readlines()
-        new_content = new_file.readlines()
-
-        d = difflib.Differ()
-        diff = list(d.compare(main_content, new_content))
-
-        print(
-            f'Differences between {old_filename} and {new_filename}:')
-
-        with open('score.diff', 'w', encoding='utf-8') as diff_file:
-            for line in diff:
-                if line.startswith('- ') or line.startswith('+ '):
-                    diff_file.write(line.strip() + '\n')
-                    print(line.strip())
-        with open(old_filename, 'w', encoding='utf-8') as main_file:
-            main_file.writelines(new_content)
-
-
-def write_to_file(courses, filename, new_filename):
-    # Write results to a file
-    # Check if course-data.txt file exists
-    # Write results to a new file
-
-    if os.path.isfile(filename):
-        filename = new_filename
-    with open(filename, 'w', encoding='utf-8') as file:
-        for course in courses:
-            file.write(f"{course['Name']}-学年: {course['Year']}\n")
-            file.write(f"{course['Name']}-学期: {course['Semester']}\n")
-            file.write(f"{course['Name']}-课程号: {course['ID']}\n")
-            file.write(f"课程名称: {course['Name']}\n")
-            file.write(f"{course['Name']}-课程性质: {course['Type']}\n")
-            file.write(f"{course['Name']}-学分: {course['Credit']}\n")
-            file.write(f"{course['Name']}-绩点: {course['GPA']}\n")
-            file.write(f"{course['Name']}-平时分: {course['Normal']}\n")
-            file.write(f"{course['Name']}-卷面分: {course['Real']}\n")
-            file.write(f"{course['Name']}-总分: {course['Total']}\n\n")
-
-
-def write_to_course_file(courses):
-    for course in courses:
-        if not os.path.isfile(course['Name'] + '.txt'):
-            with open(course['Name'] + '.txt', 'w', encoding='utf-8') as file:
-                file.write(f"学年: {course['Year']}\n")
-                file.write(f"学期: {course['Semester']}\n")
-                file.write(f"课程号: {course['ID']}\n")
-                file.write(f"课程名称: {course['Name']}\n")
-                file.write(f"课程性质: {course['Type']}\n")
-                file.write(f"学分: {course['Credit']}\n")
-                file.write(f"绩点: {course['GPA']}\n")
-                file.write(f"平时分: {course['Normal']}\n")
-                file.write(f"卷面分: {course['Real']}\n")
-                file.write(f"总分: {course['Total']}\n\n")
-            continue
-        if not os.path.isfile('score.diff'):
-            continue
-        # FIXME: Can't update old course info
-        # Update old course info
-        with open('score.diff', 'r', encoding='utf-8') as diff_file:
-            if course['Name'] in diff_file.read():
-                with open(course['Name'] + '.txt', 'w', encoding='utf-8') as file:
-                    file.write(f"学年: {course['Year']}\n")
-                    file.write(f"学期: {course['Semester']}\n")
-                    file.write(f"课程号: {course['ID']}\n")
-                    file.write(f"课程名称: {course['Name']}\n")
-                    file.write(f"课程性质: {course['Type']}\n")
-                    file.write(f"学分: {course['Credit']}\n")
-                    file.write(f"绩点: {course['GPA']}\n")
-                    file.write(f"平时分: {course['Normal']}\n")
-                    file.write(f"卷面分: {course['Real']}\n")
-                    file.write(f"总分: {course['Total']}\n\n")
 
 
 def parse_score(content):
@@ -177,6 +86,9 @@ def parse_score(content):
                 course_data['real_score'] = match
             elif cycle_index == 13:
                 course_data['total_score'] = match
+
+                course_data['user_id'] = user_id
+
                 # Create a Course object and add to the list when all required data is gathered
                 courses.append(Course(**course_data))
 
@@ -187,79 +99,50 @@ def parse_score(content):
         return []
 
 
-def get_course_info(file_name, course_name):
-    try:
-        with open(file_name, 'r') as file:
-            lines = file.readlines()
-
-            for line in lines:
-                if f"{course_name}-学分" in line:
-                    course_credit = line.split(':')[1].strip()
-                if f"{course_name}-绩点" in line:
-                    course_gpa = line.split(':')[1].strip()
-                if f"{course_name}-平时分" in line:
-                    course_normal = line.split(':')[1].strip()
-                if f"{course_name}-卷面分" in line:
-                    course_real = line.split(':')[1].strip()
-                if f"{course_name}-学期" in line:
-                    course_semester = line.split(':')[1].strip()
-
-                if f"{course_name}-学年" in line:
-                    course_year = line.split(':')[1].strip()
-                if f"{course_name}-总分" in line:
-                    course_total = line.split(':')[1].strip()
-                    dead = False
-                    if course_total not in ['优秀', '良好', '中等', '及格', '不及格']:
-                        course_total = int(course_total)
-                        if course_total < 60:
-                            dead = True
-                    else:
-                        if course_total == '不及格':
-                            dead = True
-            return {
-                "courseCredit": course_credit,
-                "courseGPA": course_gpa,
-                "courseNormal": course_normal,
-                "courseReal": course_real,
-                "courseTotal": course_total,
-                "isDead": dead,
-                "courseSemester": course_semester,
-                "courseYear": course_year
-            }
-    except Exception as e:
-        print(f"An error occurred: {e}")
+def push_to_feishu(courses: list[Course]):
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    for course in courses:
+        # If the course has not been updated, skip
+        if not check_course_update(course, user_id):
+            print('Course has not been updated, skipping...')
+            continue
+        requests.post(
+            webhook_url, headers=headers, json=course.to_json())
 
 
-def push_to_feishu(filename):
-    if not os.path.isfile(filename):
-        return
-    try:
-        with open(filename, 'r') as file:
-            lines = file.readlines()
+def store_course(course: Course, user_id: str):
+    if check_course_update(course, user_id):
+        print('Course has been updated, updating...')
+        update_course(course, user_id)
+    if not check_course_exist(course, user_id):
+        print('Course does not exist, inserting...')
+        insert_course(course, user_id)
 
-            for line in lines:
-                if "课程名称" in line:
-                    course_name = line.split(':')[1].strip()
-                    if not os.path.isfile(course_name + '.txt'):
-                        course_info = get_course_info(filename, course_name)
-                        headers = {
-                            'Content-Type': 'application/json'
-                        }
-                        json = {
-                            "isDead": course_info["isDead"],
-                            "courseName": course_name,
-                            "year": course_info["courseYear"],
-                            "semester": course_info["courseSemester"],
-                            "courseCredit": course_info["courseCredit"],
-                            "courseGPA": course_info["courseGPA"],
-                            "courseNormal": course_info["courseNormal"],
-                            "courseReal": course_info["courseReal"],
-                            "courseTotal": course_info["courseTotal"],
-                        }
-                        requests.post(
-                            webhook_url, headers=headers, json=json)
-    except Exception as e:
-        print(f"An error occurred: {e}")
+
+# Check if the course has been updated, If the total score has changed, update the course
+def check_course_update(course: Course, user_id: str):
+    # Get course info from database
+    stored_course = get_course(user_id, course.course_id,
+                               course.year, course.semester)
+    if stored_course is None:
+        return True
+
+    # If the total score has changed, update the course
+    if stored_course.total_score != course.total_score:
+        return True
+    else:
+        # If the total score hasn't changed, no update is required
+        return False
+
+
+def check_course_exist(course: Course, user_id: str):
+    stored_course = get_course(user_id, course.course_id,
+                               course.year, course.semester)
+    if stored_course is None:
+        return False
+    return True
 
 
 def get_courses(user_id, user_pwd, year, semester, webhook_url):
@@ -357,28 +240,15 @@ def get_courses(user_id, user_pwd, year, semester, webhook_url):
         # print(score_value)
 
         courses = parse_score(score_value)
-        for course in courses:
-            print(course)
+        # for course in courses:
+        #     print(course)
+        return courses
 
     finally:
         driver.quit()
 
 
-root_url = 'http://jwxt.njupt.edu.cn/'
-
-login_url = 'http://jwxt.njupt.edu.cn/default2.aspx'
-
-cookie_url = 'http://jwxt.njupt.edu.cn/beLd2jeSRcTo/5TAbvFJ54R4g.e793599.js'
-
-captcha_url = 'http://jwxt.njupt.edu.cn/CheckCode.aspx'
-
-content_url = 'http://jwxt.njupt.edu.cn/content.aspx'
-
-query_score_url = 'http://jwxt.njupt.edu.cn/xscj_gc.aspx'
-
-
-# cookie = requests.get(root_url)
-
+### Main ###
 args = parse_args()
 user_name = args.name
 user_id = args.user
@@ -386,9 +256,6 @@ user_pwd = args.password
 year = args.year
 semester = args.semester
 webhook_url = args.webhook
-
-# request with cookie
-# response = requests.get(captcha_url, cookies=cookie.cookies)
 
 # ignore print info
 null_file = StringIO()
@@ -400,4 +267,9 @@ options = Options()
 options.add_argument("--headless")
 driver = webdriver.Firefox(options=options)
 
-get_courses(user_id, user_pwd, year, semester, webhook_url)
+create_database()
+
+courses = get_courses(user_id, user_pwd, year, semester, webhook_url)
+for course in courses:
+    store_course(course, user_id)
+push_to_feishu(courses)

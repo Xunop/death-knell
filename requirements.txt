@@ -1,4 +1,4 @@
 ddddocr==1.5.5
-Pillow==10.3.0
+Pillow==10.4.0
 Requests==2.32.3
 selenium==4.22.0
