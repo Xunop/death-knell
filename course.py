@@ -1,5 +1,5 @@
 class Course:
-    def __init__(self, year, semester, course_id, name, type, credit, gpa, normal_score, real_score, total_score):
+    def __init__(self, year, semester, course_id, name, type, credit, gpa, normal_score, real_score, total_score, user_id):
         self.year = year
         self.semester = semester
         self.course_id = course_id
@@ -11,6 +11,7 @@ class Course:
         self.real_score = real_score
         self.total_score = total_score
         self.is_dead = self.check_if_dead(total_score)
+        self.user_id = user_id
 
     @staticmethod
     def check_if_dead(total_score):
@@ -32,7 +33,7 @@ class Course:
 
         return base_info
 
-    def toJSON(self):
+    def to_json(self):
         return {
             'year': self.year,
             'semester': self.semester,
@@ -46,3 +47,6 @@ class Course:
             'total_score': self.total_score,
             'is_dead': self.is_dead
         }
+
+    def __eq__(self, other):
+        return self.to_json() == other.to_json()
