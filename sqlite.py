@@ -93,6 +93,8 @@ def get_course(user_id, course_id, year, semester):
     ''', (user_id, course_id, year, semester))
     course = c.fetchone()
     conn.close()
+    if course is None:
+        return None
     return Course(*course)
 
 

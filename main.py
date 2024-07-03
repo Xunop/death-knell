@@ -270,6 +270,7 @@ driver = webdriver.Firefox(options=options)
 create_database()
 
 courses = get_courses(user_id, user_pwd, year, semester, webhook_url)
-for course in courses:
-    store_course(course, user_id)
 push_to_feishu(courses)
+for course in courses:
+    if course is not None:
+        store_course(course, user_id)
